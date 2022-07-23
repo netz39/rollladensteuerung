@@ -23,7 +23,7 @@ function jsonval {
 }
 
 function space_is_open {
-	json=$(curl -s http://spaceapi.n39.eu/json)
+	json=$(curl -s https://spaceapi.n39.eu/json)
 	prop='open'
 	
 	st=$(jsonval)

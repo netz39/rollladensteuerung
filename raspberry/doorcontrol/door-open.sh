@@ -15,5 +15,6 @@ while [[ "$ret" != "0x01" ]]; do
 		~/unstuck.sh
 		sleep 5
 	fi
+	sleep 1
 done
 

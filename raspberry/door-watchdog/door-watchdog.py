@@ -6,6 +6,7 @@ import signal
 import sys
 import time
 import threading
+import sched
 
 import argparse
 
@@ -194,10 +195,11 @@ class WatchDog:
         COUNTDOWN = 3
         LOCKED = 4
 
-    def __init__(self, mqttclient, status_topic_base, door_topic_base):
+    def __init__(self, mqttclient, status_topic_base, door_topic_base, beep_topic_base, scheduler):
         self.mqttclient = mqttclient
         self.status_topic_base = status_topic_base
         self.door_topic_base = door_topic_base
+        self.beep_topic_base = beep_topic_base
         self.countdown_duration_s = 30
 
         # start with the BOOT state
@@ -223,6 +225,11 @@ class WatchDog:
 
         # get a re-entrant lock for the Watchdog
         self.wd_lock = threading.RLock()
+
+        # beep scheduler and events
+        self.beep_sched = scheduler
+        self.beep_events = list()
+        self.beep_delay_s = 5
 
     def _status_callback(self, status):
         with self.wd_lock:
@@ -293,6 +300,7 @@ class WatchDog:
             if self.current_state != self.WDStates.COUNTDOWN:
                 # reset countdown
                 self.countdown_target = None
+                self._clear_beeps()
                 return
 
             # handle the countdown
@@ -300,6 +308,7 @@ class WatchDog:
             if self.countdown_target is None:
                 # setup
                 self.countdown_target = t + self.countdown_duration_s
+                self._schedule_beep_train(self.countdown_duration_s)
 
             elif (t > self.countdown_target) and not self.locked:
                 syslog.syslog(syslog.LOG_INFO,
@@ -311,6 +320,7 @@ class WatchDog:
 
                 # set new countdown, so locking will be re-tried
                 self.countdown_target = t + 10
+                self._schedule_beep_train(10)
 
                 # when successful, abort condition 2 will apply
 
@@ -328,6 +338,33 @@ class WatchDog:
                 self.current_state = self.WDStates.COUNTDOWN
                 syslog.syslog(syslog.LOG_INFO, "Space state is closed while in door is open, going to COUNTDOWN.")
 
+    def _clear_beeps(self):
+        with self.wd_lock:
+            for evt in self.beep_events:
+                try:
+                    self.beep_sched.cancel(evt)
+                except ValueError:
+                    # ignore: event has been removed before
+                    pass
+            self.beep_events.clear()
+
+    def _schedule_beep_train(self, duration):
+        with self.wd_lock:
+            for delay in range(0, duration, self.beep_delay_s):
+                self._schedule_beep(delay)
+
+    def _schedule_beep(self, delay):
+        with self.wd_lock:
+            evt = self.beep_sched.enter(delay, 1, self._do_beep)
+            self.beep_events.append(evt)
+
+    def _do_beep(self):
+        if self.current_state == self.WDStates.COUNTDOWN:
+            self.mqttclient.publish(topic=self.beep_topic_base,
+                                    payload=0x02,
+                                    qos=2,
+                                    retain=False)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -336,6 +373,7 @@ def main():
     parser.add_argument("--mqttport", help="MQTT port", default=1883)
     parser.add_argument("--topicdoor", help="MQTT door topic prefix", default="Netz39/Things/Door")
     parser.add_argument("--topicstate", help="MQTT state topic prefix", default="Netz39/SpaceAPI")
+    parser.add_argument("--topicbeep", help="MQTT beep topic prefix", default="Netz39/Things/Shuttercontrol/Beep")
     args = parser.parse_args()
 
     syslog.openlog("doorwatchdog", syslog.LOG_CONS | syslog.LOG_PID, syslog.LOG_USER)
@@ -346,8 +384,11 @@ def main():
     mqttclient.connect(args.mqtthost, args.mqttport, 60)
     mqttclient.loop_start()
 
+    # global scheduler
+    scheduler = sched.scheduler(time.time, time.sleep)
+
     # add some code here
-    watchdog = WatchDog(mqttclient, args.topicstate, args.topicdoor)
+    watchdog = WatchDog(mqttclient, args.topicstate, args.topicdoor, args.topicbeep, scheduler)
 
     global RUN
     RUN = True
@@ -356,6 +397,7 @@ def main():
     # when Python 3.7 is available
     while RUN:
         watchdog.step()
+        scheduler.run(False)
         time.sleep(0.5)
 
     mqttclient.loop_stop()

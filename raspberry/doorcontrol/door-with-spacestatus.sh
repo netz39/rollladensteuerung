@@ -56,7 +56,7 @@ while true; do
 			isopen=$(space_is_open)
 			echo "$isopen"
 
-			# if closed, decement timeout
+			# if closed, decrement timeout
 			if [ "$isopen" == "true" ]; then
 				if [ "$timeout" -lt "$TIMEOUT" ]; then
 					# blink off

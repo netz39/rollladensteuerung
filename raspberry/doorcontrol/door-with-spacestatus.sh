@@ -37,7 +37,7 @@ DELAY=5
 
 logger -t lockfailsafe SpaceTime observation restarted with timeout ${TIMEOUT}s and a delay of ${DELAY}s.
 
-while [[ true ]]; do
+while true; do
 	# check the door status
 	s=$(./door-status.sh)
 	echo "Door state: $s"

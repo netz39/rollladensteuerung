@@ -9,14 +9,14 @@ function wait_for_status {
 	
 	while [ "$s" != "$st" ]; do
 		s=$(./door-status.sh)
-		echo $s
+		echo "$s"
 		sleep 1s
 	done
 }
 
 function space_is_open {
 	json=$(curl -s https://spaceapi.n39.eu/json)
-	isopen=$(echo $json | jq .state.open)
+	isopen=$(echo "$json" | jq .state.open)
 	
 	echo "$isopen"
 }
@@ -27,8 +27,8 @@ function i2c_set {
 
 	ret=""
 	while [[ "$ret" != "0x01" ]]; do
-		ret=$(/usr/sbin/i2cget -y 1 $addr $cmd)
-		echo $ret
+		ret=$(/usr/sbin/i2cget -y 1 "$addr" "$cmd")
+		echo "$ret"
 	done
 }
 

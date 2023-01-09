@@ -3,6 +3,8 @@
 # Lock the door if SpaceTime is not active
 # 30 seconds after it is unlocked
 
+SPACEAPI_JSON_URL='https://spaceapi.n39.eu/json'
+
 function wait_for_status {
 	st=$1
 	s=""
@@ -14,11 +16,9 @@ function wait_for_status {
 	done
 }
 
+# returns string "true" or "false"
 function space_is_open {
-	json=$(curl -s https://spaceapi.n39.eu/json)
-	isopen=$(echo "$json" | jq .state.open)
-	
-	echo "$isopen"
+	curl -s "${SPACEAPI_JSON_URL}" | jq .state.open
 }
 
 function i2c_set {
